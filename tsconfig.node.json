@@ -10,7 +10,8 @@
     "moduleDetection": "force",
     "noEmit": true,
     "strict": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "types": ["node"]
   },
   "include": ["vite.config.ts", "tailwind.config.js", "postcss.config.js"]
 }
