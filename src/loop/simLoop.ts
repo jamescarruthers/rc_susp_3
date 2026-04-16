@@ -17,9 +17,17 @@ import { telemetry } from '../telemetry/telemetry';
 
 let sim: Simulation | null = null;
 let rafHandle = 0;
+let pendingMjcf: { xml: string; preserveState: boolean } | null = null;
 
 export function getSim(): Simulation | null {
   return sim;
+}
+
+// Queue an MJCF reload. The sim loop picks it up between frames, disposes
+// the previous Simulation, loads the new one, and (optionally) restores the
+// root free-joint qpos/qvel so live tuning doesn't teleport the car.
+export function requestModelReload(xml: string, preserveState = true) {
+  pendingMjcf = { xml, preserveState };
 }
 
 // Fixed-timestep accumulator-driven physics loop. All sim interaction (torque
@@ -73,6 +81,36 @@ export function useSimLoop() {
         lastResetSeen = resetCount;
         sim.reset();
         accumulator = 0;
+      }
+
+      if (pendingMjcf && sim) {
+        const pending = pendingMjcf;
+        pendingMjcf = null;
+        // Preserve the root body's world pose and linear / angular velocity
+        // so a parameter change doesn't reset the car.
+        let savedQpos: number[] | null = null;
+        let savedQvel: number[] | null = null;
+        if (pending.preserveState) {
+          savedQpos = Array.from(sim.qpos.subarray(0, 7));
+          savedQvel = Array.from(sim.qvel.subarray(0, 6));
+        }
+        try {
+          const mujoco = sim.mujoco;
+          sim.dispose();
+          sim = Simulation.create(mujoco, pending.xml);
+          if (savedQpos && savedQvel) {
+            sim.qpos.set(savedQpos);
+            sim.qvel.set(savedQvel);
+            sim.forward();
+          }
+          store.getState().setMjcf(pending.xml);
+          store.getState().setStatus('ready');
+          accumulator = 0;
+          telemetry.clear();
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          store.getState().setStatus('error', msg);
+        }
       }
 
       if (sim && !state.paused) {
