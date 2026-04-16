@@ -4,13 +4,15 @@ import { loadMujoco } from '../mujoco/loader';
 import { Simulation } from '../mujoco/simulation';
 import { generateCarMjcf } from '../model/generate';
 import {
-  applySteering,
+  applyAckermannSteering,
   applyWheelTorques,
   getWheelOmegas,
   getWheelTouch,
   WHEEL_NAMES,
   type WheelName,
 } from '../mujoco/actuators';
+import { ackermann } from '../control/ackermann';
+import type { SimParams } from '../store/simStore';
 
 let sim: Simulation | null = null;
 let rafHandle = 0;
@@ -79,7 +81,7 @@ export function useSimLoop() {
         const maxSteps = 20;
         let stepsThisFrame = 0;
         while (accumulator >= step && stepsThisFrame < maxSteps) {
-          applyControls(sim, state.input, state.params.maxMotorTorque);
+          applyControls(sim, state.input, state.params);
           sim.step();
           accumulator -= step;
           stepsThisFrame += 1;
@@ -127,24 +129,32 @@ export function useSimLoop() {
 function applyControls(
   sim: Simulation,
   input: { throttle: number; steering: number; handbrake: number },
-  maxTorque: number,
+  params: SimParams,
 ) {
-  // Symmetric 50/50 front-rear split for milestone 3. Torque vectoring in m8.
-  const tPerWheel = input.throttle * maxTorque * 0.5;
+  const total = input.throttle * params.maxMotorTorque;
+  // Drive bias: 0 = RWD, 1 = FWD, 0.5 = 50/50.
+  const frontShare = params.driveBias;
+  const rearShare = 1 - params.driveBias;
   const torques: Record<WheelName, number> = {
-    fl: tPerWheel,
-    fr: tPerWheel,
-    rl: tPerWheel,
-    rr: tPerWheel,
+    fl: total * frontShare * 0.5,
+    fr: total * frontShare * 0.5,
+    rl: total * rearShare * 0.5,
+    rr: total * rearShare * 0.5,
   };
   if (input.handbrake > 0) {
-    // Crude: stall rear wheels when handbrake is engaged.
     torques.rl = 0;
     torques.rr = 0;
   }
   applyWheelTorques(sim, torques);
-  // Max steering wheel angle about ±25° (0.436 rad). Scale keyboard.
-  applySteering(sim, input.steering * 0.436);
+
+  const { left, right } = ackermann({
+    steerNorm: input.steering,
+    maxInnerAngle: 0.5,
+    wheelbase: params.wheelbase,
+    trackFront: params.trackFront,
+    ackermann: params.ackermann,
+  });
+  applyAckermannSteering(sim, left, right);
 }
 
 function readChassis(

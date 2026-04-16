@@ -12,9 +12,15 @@ export function applyWheelTorques(
   }
 }
 
+// Symmetric (parallel) steering — for testing before Ackermann is wired up.
 export function applySteering(sim: Simulation, angle: number) {
   sim.setCtrl('steer_fl', angle);
   sim.setCtrl('steer_fr', angle);
+}
+
+export function applyAckermannSteering(sim: Simulation, left: number, right: number) {
+  sim.setCtrl('steer_fl', left);
+  sim.setCtrl('steer_fr', right);
 }
 
 export function getWheelOmegas(sim: Simulation): Record<WheelName, number> {
