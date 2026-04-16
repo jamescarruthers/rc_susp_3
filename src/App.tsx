@@ -8,9 +8,12 @@ import { MjcfEditor } from './ui/MjcfEditor';
 import { useState } from 'react';
 import { useSimLoop } from './loop/simLoop';
 import { useKeyboardInput } from './control/input';
+import { useGamepadInput } from './control/gamepad';
+import { PresetBar } from './ui/PresetBar';
 
 export default function App() {
   useKeyboardInput();
+  useGamepadInput();
   useSimLoop();
   const [editorOpen, setEditorOpen] = useState(false);
 
@@ -21,6 +24,7 @@ export default function App() {
   return (
     <div className="h-full w-full flex flex-col">
       <SimControls />
+      <PresetBar />
       <div className="flex flex-1 min-h-0">
         <aside className="w-72 shrink-0 border-r border-neutral-800 bg-neutral-950 text-xs font-mono overflow-hidden flex flex-col">
           <h2 className="text-neutral-300 font-semibold p-2">Tuning</h2>
