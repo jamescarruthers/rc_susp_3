@@ -2,6 +2,8 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { Ground } from './Ground';
 import { CarMesh } from './CarMesh';
+import { SuspensionOverlay } from './SuspensionOverlay';
+import { FollowCam } from './FollowCam';
 
 // Three.js default: Y-up. MuJoCo ISO 8855: Z-up. Conversion happens per-body
 // in CarMesh via utils/iso8855, so the R3F scene itself is plain Y-up and
@@ -31,7 +33,9 @@ export function Scene() {
       />
       <Ground />
       <CarMesh />
+      <SuspensionOverlay />
       <OrbitControls makeDefault target={[0, 0.1, 0]} />
+      <FollowCam />
     </Canvas>
   );
 }

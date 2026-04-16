@@ -19,6 +19,24 @@ export interface ChassisState {
   longitudinalG: number;
 }
 
+export interface WishboneGeometry {
+  // Upper and lower A-arm lengths (inboard pivot to outboard ball joint).
+  upperArm: number;
+  lowerArm: number;
+  // Inboard pivot positions, relative to the wheel centre at ride height, in
+  // the plane orthogonal to the vehicle's X axis. +Y is inboard (toward car
+  // centreline). Z is relative to the ground.
+  upperInboardY: number;
+  upperInboardZ: number;
+  lowerInboardY: number;
+  lowerInboardZ: number;
+  // Outboard ball-joint positions on the upright, also in the wheel frame.
+  upperOutboardY: number;
+  upperOutboardZ: number;
+  lowerOutboardY: number;
+  lowerOutboardZ: number;
+}
+
 export interface SimParams {
   chassisMass: number;
   cogHeight: number;
@@ -34,6 +52,7 @@ export interface SimParams {
   kpi: number;
   camber: number;
   toe: number;
+  ackermann: number; // 0 = parallel, 1 = 100 % Ackermann
   friction: [number, number, number];
   maxMotorTorque: number;
   driveBias: number; // 0 = full RWD, 1 = full FWD
@@ -43,6 +62,8 @@ export interface SimParams {
   tvIGain: number;
   understeerK: number;
   slipThreshold: number;
+  wishboneFront: WishboneGeometry;
+  wishboneRear: WishboneGeometry;
 }
 
 export interface ControlInput {
@@ -68,6 +89,8 @@ interface SimStore {
 
   mjcf: string;
   customMjcf: string | null;
+  overlay: boolean;
+  followCam: boolean;
 
   // actions
   setStatus: (s: SimStatus, error?: string | null) => void;
@@ -80,9 +103,24 @@ interface SimStore {
   tick: (time: number, fps: number, physicsHz: number) => void;
   setMjcf: (xml: string) => void;
   setCustomMjcf: (xml: string | null) => void;
+  setOverlay: (v: boolean) => void;
+  setFollowCam: (v: boolean) => void;
   reset: () => void;
   triggerReset: number;
 }
+
+const defaultWishbone: WishboneGeometry = {
+  upperArm: 0.055,
+  lowerArm: 0.065,
+  upperInboardY: 0.03,
+  upperInboardZ: 0.085,
+  lowerInboardY: 0.035,
+  lowerInboardZ: 0.035,
+  upperOutboardY: 0.085,
+  upperOutboardZ: 0.09,
+  lowerOutboardY: 0.095,
+  lowerOutboardZ: 0.035,
+};
 
 export const defaultParams: SimParams = {
   chassisMass: 1.8,
@@ -99,6 +137,7 @@ export const defaultParams: SimParams = {
   kpi: 8,
   camber: -1,
   toe: 0,
+  ackermann: 1.0,
   friction: [1.0, 0.05, 0.001],
   maxMotorTorque: 1.2,
   driveBias: 0.5,
@@ -108,6 +147,8 @@ export const defaultParams: SimParams = {
   tvIGain: 0.5,
   understeerK: 0.002,
   slipThreshold: 0.15,
+  wishboneFront: { ...defaultWishbone },
+  wishboneRear: { ...defaultWishbone },
 };
 
 const emptyWheel: WheelState = {
@@ -139,6 +180,8 @@ export const useSimStore = create<SimStore>((set) => ({
   params: { ...defaultParams },
   mjcf: '',
   customMjcf: null,
+  overlay: false,
+  followCam: false,
   triggerReset: 0,
 
   setStatus: (s, error = null) => set({ status: s, error }),
@@ -156,5 +199,7 @@ export const useSimStore = create<SimStore>((set) => ({
   tick: (time, fps, physicsHz) => set({ time, fps, physicsHz }),
   setMjcf: (mjcf) => set({ mjcf }),
   setCustomMjcf: (customMjcf) => set({ customMjcf }),
+  setOverlay: (overlay) => set({ overlay }),
+  setFollowCam: (followCam) => set({ followCam }),
   reset: () => set((s) => ({ triggerReset: s.triggerReset + 1 })),
 }));

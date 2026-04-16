@@ -8,6 +8,8 @@ export function SimControls() {
   const physicsHz = useSimStore((s) => s.physicsHz);
   const status = useSimStore((s) => s.status);
   const error = useSimStore((s) => s.error);
+  const overlay = useSimStore((s) => s.overlay);
+  const followCam = useSimStore((s) => s.followCam);
 
   return (
     <div className="flex items-center gap-3 px-3 py-2 bg-neutral-900 border-b border-neutral-800 text-xs font-mono">
@@ -25,6 +27,22 @@ export function SimControls() {
       >
         Reset
       </button>
+      <label className="flex items-center gap-1">
+        <input
+          type="checkbox"
+          checked={overlay}
+          onChange={(e) => useSimStore.getState().setOverlay(e.target.checked)}
+        />
+        overlay
+      </label>
+      <label className="flex items-center gap-1">
+        <input
+          type="checkbox"
+          checked={followCam}
+          onChange={(e) => useSimStore.getState().setFollowCam(e.target.checked)}
+        />
+        follow
+      </label>
       <label className="flex items-center gap-2">
         Speed
         <input
