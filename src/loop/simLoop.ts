@@ -13,6 +13,7 @@ import {
 } from '../mujoco/actuators';
 import { ackermann } from '../control/ackermann';
 import type { SimParams } from '../store/simStore';
+import { telemetry } from '../telemetry/telemetry';
 
 let sim: Simulation | null = null;
 let rafHandle = 0;
@@ -83,6 +84,7 @@ export function useSimLoop() {
         while (accumulator >= step && stepsThisFrame < maxSteps) {
           applyControls(sim, state.input, state.params);
           sim.step();
+          pushTelemetrySample(sim, state.input);
           accumulator -= step;
           stepsThisFrame += 1;
           physSteps += 1;
@@ -194,6 +196,55 @@ function readChassis(
     longitudinalG: longAcc,
     lateralG: latAcc,
   };
+}
+
+function pushTelemetrySample(sim: Simulation, input: { throttle: number; steering: number; handbrake: number }) {
+  const qv = sim.qvel;
+  const speed = Math.hypot(qv[0] ?? 0, qv[1] ?? 0);
+  const yawRate = qv[5] ?? 0;
+  // Ask the sensor adr table for tyre omegas/touch directly; cheaper than
+  // the WHEEL_NAMES loop over object lookups inside the physics loop.
+  const sd = sim.sensordata;
+  const o = {
+    fl: sd[sim.sensorAdr('omega_fl')] ?? 0,
+    fr: sd[sim.sensorAdr('omega_fr')] ?? 0,
+    rl: sd[sim.sensorAdr('omega_rl')] ?? 0,
+    rr: sd[sim.sensorAdr('omega_rr')] ?? 0,
+  };
+  const t = {
+    fl: sd[sim.sensorAdr('touch_fl')] ?? 0,
+    fr: sd[sim.sensorAdr('touch_fr')] ?? 0,
+    rl: sd[sim.sensorAdr('touch_rl')] ?? 0,
+    rr: sd[sim.sensorAdr('touch_rr')] ?? 0,
+  };
+  const ctrl = sim.ctrl;
+  const tq = {
+    fl: ctrl[sim.actuatorId('drive_fl')] ?? 0,
+    fr: ctrl[sim.actuatorId('drive_fr')] ?? 0,
+    rl: ctrl[sim.actuatorId('drive_rl')] ?? 0,
+    rr: ctrl[sim.actuatorId('drive_rr')] ?? 0,
+  };
+  telemetry.push({
+    time: sim.time,
+    speed,
+    yawRate,
+    latG: 0,
+    longG: 0,
+    steering: input.steering,
+    throttle: input.throttle,
+    omega_fl: o.fl,
+    omega_fr: o.fr,
+    omega_rl: o.rl,
+    omega_rr: o.rr,
+    torque_fl: tq.fl,
+    torque_fr: tq.fr,
+    torque_rl: tq.rl,
+    torque_rr: tq.rr,
+    touch_fl: t.fl,
+    touch_fr: t.fr,
+    touch_rl: t.rl,
+    touch_rr: t.rr,
+  });
 }
 
 function pushWheels(sim: Simulation) {
