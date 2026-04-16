@@ -166,6 +166,22 @@ export class Simulation {
     return id === undefined ? -1 : id;
   }
 
+  // Return the offset into `sensordata` for the named sensor, or -1 if
+  // not found.
+  sensorAdr(name: string): number {
+    const id = this.sensorId(name);
+    if (id < 0) return -1;
+    const adr = (this.model as unknown as { sensor_adr: ArrayLike<number> }).sensor_adr;
+    return adr[id];
+  }
+
+  sensorDim(name: string): number {
+    const id = this.sensorId(name);
+    if (id < 0) return 0;
+    const dim = (this.model as unknown as { sensor_dim: ArrayLike<number> }).sensor_dim;
+    return dim[id];
+  }
+
   private cacheLookups() {
     const { mujoco, model } = this;
     const nameFn = (mujoco as unknown as {
