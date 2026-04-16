@@ -12,8 +12,12 @@ import {
   type WheelName,
 } from '../mujoco/actuators';
 import { ackermann } from '../control/ackermann';
+import { runTorqueVectoring, type TVState } from '../control/torqueVectoring';
+import { runTractionControl } from '../control/tractionControl';
 import type { SimParams } from '../store/simStore';
 import { telemetry } from '../telemetry/telemetry';
+
+const tvState: TVState = { integral: 0 };
 
 let sim: Simulation | null = null;
 let rafHandle = 0;
@@ -171,22 +175,6 @@ function applyControls(
   input: { throttle: number; steering: number; handbrake: number },
   params: SimParams,
 ) {
-  const total = input.throttle * params.maxMotorTorque;
-  // Drive bias: 0 = RWD, 1 = FWD, 0.5 = 50/50.
-  const frontShare = params.driveBias;
-  const rearShare = 1 - params.driveBias;
-  const torques: Record<WheelName, number> = {
-    fl: total * frontShare * 0.5,
-    fr: total * frontShare * 0.5,
-    rl: total * rearShare * 0.5,
-    rr: total * rearShare * 0.5,
-  };
-  if (input.handbrake > 0) {
-    torques.rl = 0;
-    torques.rr = 0;
-  }
-  applyWheelTorques(sim, torques);
-
   const { left, right } = ackermann({
     steerNorm: input.steering,
     maxInnerAngle: 0.5,
@@ -195,6 +183,37 @@ function applyControls(
     ackermann: params.ackermann,
   });
   applyAckermannSteering(sim, left, right);
+
+  // Chassis forward speed in vehicle frame for TV + TC.
+  const xq = sim.xquat;
+  const id = sim.bodyId('chassis');
+  const q = Math.max(id, 0) * 4;
+  const qw = xq[q];
+  const qz = xq[q + 3];
+  const yaw = Math.atan2(2 * (qw * qz), 1 - 2 * qz * qz);
+  const vxWorld = sim.qvel[0] ?? 0;
+  const vyWorld = sim.qvel[1] ?? 0;
+  const vx = vxWorld * Math.cos(yaw) + vyWorld * Math.sin(yaw);
+  const yawRate = sim.qvel[5] ?? 0;
+  const steerAngle = (left + right) * 0.5;
+
+  const tv = runTorqueVectoring(
+    { throttle: input.throttle, steerAngle, speed: vx, yawRate, params, dt: sim.timestep },
+    tvState,
+  );
+  const sd = sim.sensordata;
+  const omega = {
+    fl: sd[sim.sensorAdr('omega_fl')] ?? 0,
+    fr: sd[sim.sensorAdr('omega_fr')] ?? 0,
+    rl: sd[sim.sensorAdr('omega_rl')] ?? 0,
+    rr: sd[sim.sensorAdr('omega_rr')] ?? 0,
+  };
+  const tc = runTractionControl({ vx, omega, torques: tv.torques, params });
+  let torques: Record<WheelName, number> = tc.torques;
+  if (input.handbrake > 0) {
+    torques = { ...torques, rl: 0, rr: 0 };
+  }
+  applyWheelTorques(sim, torques);
 }
 
 function readChassis(
